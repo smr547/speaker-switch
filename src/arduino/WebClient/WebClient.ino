@@ -1,14 +1,14 @@
 /*
- * Speaker Control
- * 
- * Monitor http://dweet.io/latest/dweet/for/goreen-speakers
- * for change in "Speaker Status" and respond by setting 
- * an array of relays
- * 
- * Steven Ring
- * May, 2021
- * 
- * Based on work 
+   Speaker Control
+
+   Monitor http://dweet.io/latest/dweet/for/goreen-speakers
+   for change in "Speaker Status" and respond by setting
+   an array of relays
+
+   Steven Ring
+   May, 2021
+
+   Based on work
   by David A. Mellis
   modified 9 Apr 2012
   by Tom Igoe, based on work by Adrian McEwen
@@ -17,6 +17,9 @@
 #include <SPI.h>
 #include <Ethernet.h>
 #include <ArduinoJson.h>
+
+#define DEBUG 1
+//#undef DEBUG
 
 #define BUFFLEN 256
 
@@ -27,6 +30,7 @@
 
 const int spk_pin[4] = {2, 3, 4, 5};
 int spk_status[4] = {LOW, LOW, LOW, LOW};
+const char * spk_name[] = {"patio", "dining", "kitchen", "lounge", "all"};
 
 
 DeserializationError error;
@@ -58,40 +62,49 @@ EthernetClient client;
 void setup() {
   // You can use Ethernet.init(pin) to configure the CS pin
   Ethernet.init(10);  // Most Arduino shields
-  //Ethernet.init(5);   // MKR ETH shield
-  //Ethernet.init(0);   // Teensy 2.0
-  //Ethernet.init(20);  // Teensy++ 2.0
-  //Ethernet.init(15);  // ESP8266 with Adafruit Featherwing Ethernet
-  //Ethernet.init(33);  // ESP32 with Adafruit Featherwing Ethernet
 
   // Open serial communications and wait for port to open:
+#ifdef DEBUG
   Serial.begin(9600);
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
   }
+#endif
 
   // start the Ethernet connection:
+#ifdef DEBUG
   Serial.println("Initialize Ethernet with DHCP:");
+#endif
   if (Ethernet.begin(mac) == 0) {
+#ifdef DEBUG
     Serial.println("Failed to configure Ethernet using DHCP");
+#endif
     // Check for Ethernet hardware present
     if (Ethernet.hardwareStatus() == EthernetNoHardware) {
+#ifdef DEBUG
       Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
+#endif
       while (true) {
         delay(1); // do nothing, no point running without Ethernet hardware
       }
     }
     if (Ethernet.linkStatus() == LinkOFF) {
+#ifdef DEBUG
       Serial.println("Ethernet cable is not connected.");
+#endif
     }
     // try to congifure using IP address instead of DHCP:
     Ethernet.begin(mac, ip, myDns);
   } else {
+#ifdef DEBUG
     Serial.print("  DHCP assigned IP ");
     Serial.println(Ethernet.localIP());
+#endif
   }
 
-  for (int i = 0; i < 4; i++) {
+  // initalise speaker relays
+
+  for (int i = 0; i < sizeof(spk_status); i++) {
     pinMode(spk_pin[i], OUTPUT);
     digitalWrite(spk_pin[i], spk_status[i]);
   };
@@ -104,22 +117,35 @@ void setup() {
 
 }
 
+/*
+   Connect to dweet server
+
+   Return
+     true if OK
+     false on error
+*/
 bool connect_to_server(void) {
   // give the Ethernet shield a second to initialize:
   delay(1000);
- // Serial.print("connecting to ");
- // Serial.print(server);
- // Serial.println("...");
+#ifdef DEBUG
+  Serial.print("connecting to ");
+  Serial.print(server);
+  Serial.println("...");
+#endif
 
   // if you get a connection, report back via serial:
   if (client.connect(server, 80)) {
-//    Serial.print("connected to ");
-//    Serial.println(client.remoteIP());
+#ifdef DEBUG
+    Serial.print("connected to ");
+    Serial.println(client.remoteIP());
+#endif
     return true;
 
   } else {
     // if you didn't get a connection to the server:
+#ifdef DEBUG
     Serial.println("connection failed");
+#endif
     return false;
   }
 }
@@ -136,24 +162,6 @@ void loop() {
   client.println("Connection: keep-alive");
   client.println();
 
-  // toggle relays
-  /*
-    for (int i = 0; i < 4 ; i++) {
-          if (spk_status[i] == LOW) {
-            spk_status[i] = HIGH;
-          } else {
-            spk_status[i] = LOW;
-          }
-          Serial.print(spk_pin[i], DEC);
-          Serial.print(" ");
-          Serial.print(spk_status[i], DEC);
-          digitalWrite(spk_pin[i], spk_status[i]);
-          Serial.println("");
-
-        };
-  */
-
-
 
   // if the server remains connected and
   // if there are incoming bytes available
@@ -164,49 +172,174 @@ void loop() {
 
       int n = readLine(&client, lineBuffer, lineBufferLen, 100);
 
-      // Serial.println(lineBuffer);
+#ifdef DEBUG
 
-      // Serial.print("Bytes: ");
-      // Serial.println(n, DEC);
+      Serial.println(lineBuffer);
+
+      Serial.print("Bytes: ");
+      Serial.println(n, DEC);
+#endif
 
       // prepare to deserialise JSON
 
       strcat(buffer, "}");
-      // Serial.print("deserialising: ");
-      //Serial.println(buffer);
+#ifdef DEBUG
+      Serial.print("deserialising: ");
+      Serial.println(buffer);
+#endif
 
 
 
       error = deserializeJson(doc, buffer);
       if (error) {
-      //  Serial.print(F("deserializeJson() failed: "));
-      //  Serial.println(error.f_str());
+#ifdef DEBUG
+        Serial.print(F("deserializeJson() failed: "));
+        Serial.println(error.f_str());
+#endif
       } else {
-        //char * jsonLine = doc["json_line"];
         char jsonLine[256];
         strcpy(jsonLine, doc["json_line"]);
-        // Serial.print("now deserialising: ");
-        // Serial.print(jsonLine);
-        // Serial.println("|");
+#ifdef DEBUG
+        Serial.print("now deserialising: ");
+        Serial.print(jsonLine);
+#endif
 
         error = deserializeJson(doc, jsonLine);
         if (error) {
-         // Serial.print(F("deserializeJson() failed: "));
+#ifdef DEBUG
+          // Serial.print(F("deserializeJson() failed: "));
           // Serial.println(error.f_str());
+#endif
         } else {
-          //Serial.println("That's JSON!!");
           const char* command = doc["content"]["Speaker Status"];
-          command = toLower(command);
-          //Serial.print("Command: ");
+          processCommand(command);
+#ifdef DEBUG
+          Serial.print("Command: ");
           Serial.println(command);
+#endif
         }
       }
     }
   }
 
-//  Serial.println();
-//  Serial.println("disconnecting.");
+#ifdef DEBUG
+  Serial.println();
+  Serial.println("disconnecting.");
+#endif
   client.stop();
+}
+
+/*
+    Process the supplied command -- expecting something like "lounge on" or "all off"
+    Return:
+      0 if ok
+      < 0 on error
+*/
+int processCommand(char * command) {
+
+  // covert to lower case and split in two
+  command = toLower(command);
+
+  // split into <target> <op>
+
+  char * target = command;
+  char * op = command;
+  char * ptr = command;
+
+  while (*ptr != '\0') {
+    if (*ptr == ' ') {
+      op = ptr + 1;
+      break;
+    }
+  }
+
+// check that we could find both a target and op
+  if (op == command) {
+#ifdef DEBUG
+    Serial.println("could not parse <target> <op>");
+#endif
+    return -1;
+  }
+
+
+  // find target speakers
+
+  int spk_index = findSpeaker(target);
+  if (spk_index < 0) {
+#ifdef DEBUG
+    Serial.println("speaker not recognized");
+#endif
+    return -2;
+  }
+
+  // decode the op as either "on" or "off"
+  int opCode = decodeOp(op);
+  if (opCode < 0) {
+#ifdef DEBUG
+    Serial.println("op not recognized");
+#endif
+    return -3;
+  }
+
+  // check for "all" speakers
+
+  if (spk_index == (sizeof(spk_name) - 1)) {
+    // is "all"
+    if (opCode == 1) {
+#ifdef DEBUG
+      Serial.println("cannot execute 'all on'");
+#endif
+      return -4;
+    }
+    // turn all off
+    for (int i = 0; i < sizeof(spk_status); i++) {
+      spk_status[i] = LOW;
+    }
+  } else {
+    // control selected speaker
+    spk_status[spk_index] = opCode;
+  }
+
+  // update relay status
+
+  for (int i = 0; i < sizeof(spk_status); i++) {
+    digitalWrite(spk_pin[i], spk_status[i]);
+  }
+
+  // all done ok
+  return 0;
+}
+/*
+   decode the supplied operation
+   Return
+     0 if "off"
+     1 if "on"
+     -1 on error
+*/
+int decodeOp(const char * op) {
+  if (strcmp(op, "on") == 0) {
+    return 1;
+  } else if (strcmp(op, "off") == 0) {
+    return 0;
+  } else {
+    return -1;
+  }
+}
+
+/*
+    Find the named in the string
+    Return:
+      index of speaker in spk_name array
+      -1 if not found
+*/
+
+int findSpeaker(const char * speaker) {
+  for (int i = 0; i < sizeof(spk_name); i++) {
+    if (strcmp(speaker, spk_name[i]) == 0) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 /*
@@ -236,9 +369,9 @@ int readLine(EthernetClient * c, char * buf, int max_len, int timeout_millisecs)
   }
 }
 
-/* 
- *  Convert supplied string to lower case
- */
+/*
+    Convert supplied string to lower case (in place)
+*/
 char * toLower(char * buf) {
   char * ptr = buf;
   while (*ptr != '\0') {
