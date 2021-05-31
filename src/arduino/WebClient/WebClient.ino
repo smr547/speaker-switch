@@ -35,6 +35,7 @@ const char * spk_name[] = {"patio", "dining", "kitchen", "lounge", "all"};
 
 DeserializationError error;
 const char buffer[BUFFLEN];
+char jsonLine[256];
 char * lineBuffer;
 int lineBufferLen;
 
@@ -44,10 +45,10 @@ byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 
 // if you don't want to use DNS (and reduce your sketch size)
 // use the numeric IP instead of the name for the server:
-//IPAddress server(74,125,232,128);  // numeric IP for Google (no DNS)
-char server[] = "dweet.io";    // name address for Google (using DNS)
+// IPAddress server(3,213,104,19);  // numeric IP for dweet.io
+const char server[] = "dweet.io";    // name address for dweet.io 
 
-StaticJsonDocument<128> doc;
+StaticJsonDocument<256> doc;
 
 // Set the static IP address to use if the DHCP fails to assign
 IPAddress ip(10, 1, 1, 177);
@@ -73,16 +74,16 @@ void setup() {
 
   // start the Ethernet connection:
 #ifdef DEBUG
-  Serial.println("Initialize Ethernet with DHCP:");
+  Serial.println(F("Initialize Ethernet with DHCP:"));
 #endif
   if (Ethernet.begin(mac) == 0) {
 #ifdef DEBUG
-    Serial.println("Failed to configure Ethernet using DHCP");
+    Serial.println(F("Failed to configure Ethernet using DHCP"));
 #endif
     // Check for Ethernet hardware present
     if (Ethernet.hardwareStatus() == EthernetNoHardware) {
 #ifdef DEBUG
-      Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
+      Serial.println(F("Ethernet shield was not found.  Sorry, can't run without hardware. :("));
 #endif
       while (true) {
         delay(1); // do nothing, no point running without Ethernet hardware
@@ -90,14 +91,14 @@ void setup() {
     }
     if (Ethernet.linkStatus() == LinkOFF) {
 #ifdef DEBUG
-      Serial.println("Ethernet cable is not connected.");
+      Serial.println(F("Ethernet cable is not connected."));
 #endif
     }
     // try to congifure using IP address instead of DHCP:
     Ethernet.begin(mac, ip, myDns);
   } else {
 #ifdef DEBUG
-    Serial.print("  DHCP assigned IP ");
+    Serial.print(F("  DHCP assigned IP "));
     Serial.println(Ethernet.localIP());
 #endif
   }
@@ -115,6 +116,13 @@ void setup() {
   lineBuffer = &buffer[strlen(buffer)];
   lineBufferLen = BUFFLEN - strlen(buffer);
 
+  #ifdef DEBUG
+  Serial.print("buffer: ");
+  Serial.println(buffer);
+  Serial.print("lineBuffer: ");
+  Serial.println(lineBuffer);
+  #endif
+
 }
 
 /*
@@ -128,15 +136,15 @@ bool connect_to_server(void) {
   // give the Ethernet shield a second to initialize:
   delay(1000);
 #ifdef DEBUG
-  Serial.print("connecting to ");
+  Serial.print(F("connecting to "));
   Serial.print(server);
-  Serial.println("...");
+  Serial.println(F("..."));
 #endif
 
   // if you get a connection, report back via serial:
   if (client.connect(server, 80)) {
 #ifdef DEBUG
-    Serial.print("connected to ");
+    Serial.print(F("connected to "));
     Serial.println(client.remoteIP());
 #endif
     return true;
@@ -144,7 +152,7 @@ bool connect_to_server(void) {
   } else {
     // if you didn't get a connection to the server:
 #ifdef DEBUG
-    Serial.println("connection failed");
+    Serial.println(F("connection failed"));
 #endif
     return false;
   }
@@ -157,9 +165,9 @@ void loop() {
 
   // make HTTP request:
   // Make a HTTP request:
-  client.println("GET /listen/for/dweets/from/gooreen-speakers HTTP/1.1");
-  client.println("Host: dweet.io");
-  client.println("Connection: keep-alive");
+  client.println(F("GET /listen/for/dweets/from/gooreen-speakers HTTP/1.1"));
+  client.println(F("Host: dweet.io"));
+  client.println(F("Connection: keep-alive"));
   client.println();
 
 
@@ -176,7 +184,7 @@ void loop() {
 
       Serial.println(lineBuffer);
 
-      Serial.print("Bytes: ");
+      Serial.print(F("Bytes: "));
       Serial.println(n, DEC);
 #endif
 
@@ -184,7 +192,7 @@ void loop() {
 
       strcat(buffer, "}");
 #ifdef DEBUG
-      Serial.print("deserialising: ");
+      Serial.print(F("deserialising: "));
       Serial.println(buffer);
 #endif
 
@@ -197,26 +205,27 @@ void loop() {
         Serial.println(error.f_str());
 #endif
       } else {
-        char jsonLine[256];
+        
         strcpy(jsonLine, doc["json_line"]);
 #ifdef DEBUG
-        Serial.print("now deserialising: ");
-        Serial.print(jsonLine);
+        Serial.print(F("now deserialising: "));
+        Serial.println(jsonLine);
 #endif
 
         error = deserializeJson(doc, jsonLine);
         if (error) {
 #ifdef DEBUG
-          // Serial.print(F("deserializeJson() failed: "));
-          // Serial.println(error.f_str());
+          Serial.print(F("deserializeJson() failed: "));
+          Serial.println(error.f_str());
+          delay(1000);
 #endif
         } else {
           const char* command = doc["content"]["Speaker Status"];
-          processCommand(command);
 #ifdef DEBUG
-          Serial.print("Command: ");
+          Serial.print(F("Command: "));
           Serial.println(command);
-#endif
+#endif          
+          processCommand(command);
         }
       }
     }
@@ -240,6 +249,11 @@ int processCommand(char * command) {
   // covert to lower case and split in two
   command = toLower(command);
 
+  #ifdef DEBUG
+  Serial.print(F("processing: "));
+  Serial.println(command);
+  #endif
+
   // split into <target> <op>
 
   char * target = command;
@@ -256,7 +270,7 @@ int processCommand(char * command) {
 // check that we could find both a target and op
   if (op == command) {
 #ifdef DEBUG
-    Serial.println("could not parse <target> <op>");
+    Serial.println(F("could not parse <target> <op>"));
 #endif
     return -1;
   }
@@ -267,7 +281,7 @@ int processCommand(char * command) {
   int spk_index = findSpeaker(target);
   if (spk_index < 0) {
 #ifdef DEBUG
-    Serial.println("speaker not recognized");
+    Serial.println(F("speaker not recognized"));
 #endif
     return -2;
   }
@@ -276,7 +290,7 @@ int processCommand(char * command) {
   int opCode = decodeOp(op);
   if (opCode < 0) {
 #ifdef DEBUG
-    Serial.println("op not recognized");
+    Serial.println(F("op not recognized"));
 #endif
     return -3;
   }
@@ -287,7 +301,7 @@ int processCommand(char * command) {
     // is "all"
     if (opCode == 1) {
 #ifdef DEBUG
-      Serial.println("cannot execute 'all on'");
+      Serial.println(F("cannot execute 'all on'"));
 #endif
       return -4;
     }
