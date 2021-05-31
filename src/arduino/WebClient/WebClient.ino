@@ -121,6 +121,8 @@ void setup() {
   Serial.println(buffer);
   Serial.print("lineBuffer: ");
   Serial.println(lineBuffer);
+  Serial.print(F("lineBufferLen: "));
+  Serial.println(lineBufferLen);
   #endif
 
 }
