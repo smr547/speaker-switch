@@ -18,8 +18,8 @@
 #include <Ethernet.h>
 #include <ArduinoJson.h>
 
-#define DEBUG 1
-//#undef DEBUG
+//#define DEBUG 1
+#undef DEBUG
 
 #define BUFFLEN 256
 
@@ -46,7 +46,7 @@ byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 // if you don't want to use DNS (and reduce your sketch size)
 // use the numeric IP instead of the name for the server:
 // IPAddress server(3,213,104,19);  // numeric IP for dweet.io
-const char server[] = "dweet.io";    // name address for dweet.io 
+const char server[] = "dweet.io";    // name address for dweet.io
 
 StaticJsonDocument<256> doc;
 
@@ -116,14 +116,14 @@ void setup() {
   lineBuffer = &buffer[strlen(buffer)];
   lineBufferLen = BUFFLEN - strlen(buffer);
 
-  #ifdef DEBUG
+#ifdef DEBUG
   Serial.print("buffer: ");
   Serial.println(buffer);
   Serial.print("lineBuffer: ");
   Serial.println(lineBuffer);
   Serial.print(F("lineBufferLen: "));
   Serial.println(lineBufferLen);
-  #endif
+#endif
 
 }
 
@@ -207,7 +207,7 @@ void loop() {
         Serial.println(error.f_str());
 #endif
       } else {
-        
+
         strcpy(jsonLine, doc["json_line"]);
 #ifdef DEBUG
         Serial.print(F("now deserialising: "));
@@ -226,8 +226,12 @@ void loop() {
 #ifdef DEBUG
           Serial.print(F("Command: "));
           Serial.println(command);
-#endif          
-          processCommand(command);
+#endif
+          int rc = processCommand(command);
+#ifdef DEBUG
+          Serial.print(F("processing return code: "));
+          Serial.println(rc, DEC);
+#endif
         }
       }
     }
@@ -251,10 +255,10 @@ int processCommand(char * command) {
   // covert to lower case and split in two
   command = toLower(command);
 
-  #ifdef DEBUG
+#ifdef DEBUG
   Serial.print(F("processing: "));
   Serial.println(command);
-  #endif
+#endif
 
   // split into <target> <op>
 
@@ -264,12 +268,21 @@ int processCommand(char * command) {
 
   while (*ptr != '\0') {
     if (*ptr == ' ') {
+      *ptr = '\0';
       op = ptr + 1;
       break;
     }
+    ptr++;
   }
 
-// check that we could find both a target and op
+#ifdef DEBUG
+  Serial.print(F("target: "));
+  Serial.println(target);
+  Serial.print(F("op: "));
+  Serial.println(op);
+#endif
+
+  // check that we could find both a target and op
   if (op == command) {
 #ifdef DEBUG
     Serial.println(F("could not parse <target> <op>"));
@@ -281,6 +294,12 @@ int processCommand(char * command) {
   // find target speakers
 
   int spk_index = findSpeaker(target);
+
+#ifdef DEBUG
+  Serial.print(F("spk_index: "));
+  Serial.println(spk_index);
+#endif
+
   if (spk_index < 0) {
 #ifdef DEBUG
     Serial.println(F("speaker not recognized"));
@@ -298,8 +317,12 @@ int processCommand(char * command) {
   }
 
   // check for "all" speakers
+#ifdef DEBUG
+  Serial.print(F("sizeof(spk_name): "));
+  Serial.println(sizeof(spk_name));
+#endif
 
-  if (spk_index == (sizeof(spk_name) - 1)) {
+  if (spk_index == 4) {
     // is "all"
     if (opCode == 1) {
 #ifdef DEBUG
