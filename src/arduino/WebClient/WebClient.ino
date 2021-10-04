@@ -52,7 +52,7 @@ StaticJsonDocument<256> doc;
 
 // Set the static IP address to use if the DHCP fails to assign
 IPAddress ip(10, 1, 1, 177);
-IPAddress myDns(10, 1, 1, 1);
+// IPAddress myDns(10, 1, 1, 1);
 
 // Initialize the Ethernet client library
 // with the IP address and port of the server
@@ -61,47 +61,12 @@ EthernetClient client;
 
 
 void setup() {
-  // You can use Ethernet.init(pin) to configure the CS pin
-  Ethernet.init(10);  // Most Arduino shields
 
-  // Open serial communications and wait for port to open:
-#ifdef DEBUG
-  Serial.begin(9600);
-  while (!Serial) {
-    ; // wait for serial port to connect. Needed for native USB port only
-  }
-#endif
+  // show error status on builtin led via panic() function
+  pinMode(LED_BUILTIN, OUTPUT);
 
-  // start the Ethernet connection:
-#ifdef DEBUG
-  Serial.println(F("Initialize Ethernet with DHCP:"));
-#endif
-  if (Ethernet.begin(mac) == 0) {
-#ifdef DEBUG
-    Serial.println(F("Failed to configure Ethernet using DHCP"));
-#endif
-    // Check for Ethernet hardware present
-    if (Ethernet.hardwareStatus() == EthernetNoHardware) {
-#ifdef DEBUG
-      Serial.println(F("Ethernet shield was not found.  Sorry, can't run without hardware. :("));
-#endif
-      while (true) {
-        delay(1); // do nothing, no point running without Ethernet hardware
-      }
-    }
-    if (Ethernet.linkStatus() == LinkOFF) {
-#ifdef DEBUG
-      Serial.println(F("Ethernet cable is not connected."));
-#endif
-    }
-    // try to congifure using IP address instead of DHCP:
-    Ethernet.begin(mac, ip, myDns);
-  } else {
-#ifdef DEBUG
-    Serial.print(F("  DHCP assigned IP "));
-    Serial.println(Ethernet.localIP());
-#endif
-  }
+
+
 
   // initalise speaker relays
 
@@ -123,6 +88,38 @@ void setup() {
   Serial.println(lineBuffer);
   Serial.print(F("lineBufferLen: "));
   Serial.println(lineBufferLen);
+#endif
+
+}
+
+void network_setup(void) {
+
+  // You can use Ethernet.init(pin) to configure the CS pin
+  Ethernet.init(10);  // Most Arduino shields
+
+  // start the Ethernet connection:
+#ifdef DEBUG
+  Serial.println(F("Initialize Ethernet with DHCP:"));
+#endif
+  Ethernet.begin(mac, ip);
+
+  // Check for Ethernet hardware present
+  if (Ethernet.hardwareStatus() == EthernetNoHardware) {
+#ifdef DEBUG
+    Serial.println(F("Ethernet shield was not found.  Sorry, can't run without hardware. :("));
+#endif
+    panic(1);  // flash the led once at 2 second intervals
+  }
+  if (Ethernet.linkStatus() == LinkOFF) {
+#ifdef DEBUG
+    Serial.println(F("Ethernet cable is not connected."));
+#endif
+    panic(2);
+  }
+
+#ifdef DEBUG
+  Serial.print(F("IP is: "));
+  Serial.println(Ethernet.localIP());
 #endif
 
 }
@@ -162,8 +159,12 @@ bool connect_to_server(void) {
 
 void loop() {
 
+  network_setup();
+
   // wait for server connection
-  while (!connect_to_server()) {}
+  while (!connect_to_server()) {
+    panic(4);
+  }
 
   // make HTTP request:
   // Make a HTTP request:
@@ -418,4 +419,16 @@ char * toLower(char * buf) {
     ptr++;
   }
   return buf;
+}
+
+void panic(int err) {
+  for (int j = 0; j < 5; j++) {
+    for (int i = 1; i <= err; i++) {
+      digitalWrite(LED_BUILTIN, HIGH);
+      delay(50);
+      digitalWrite(LED_BUILTIN, LOW);
+      delay(250);
+    }
+    delay(2000);
+  }
 }
