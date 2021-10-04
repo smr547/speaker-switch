@@ -121,13 +121,13 @@ void setup() {
    Return NULL if the client connection is lost.
    Prevern buffer overflow by returning partial lines of text
 */
-char * getRequestLine(EthernetClient * client) {
+char * getRequestLine(EthernetClient client) {
 
   unsigned short ptr = 0;   // current text insertion point within the buffer
 
-  while (client->connected()) { // loop continuously, reading character until connection lost
-    if (client->available()) {
-      char c = client->read();
+  while (client.connected()) { // loop continuously, reading character until connection lost
+    if (client.available()) {
+      char c = client.read();
       buffer[ptr] = '\0'; // make sure the buffer always contains a valid, null terminated, string
       if (ptr == MAX_BUF_LEN - 1) {
         return buffer;    // buffer is full, return the text
@@ -150,25 +150,64 @@ char * getRequestLine(EthernetClient * client) {
   return NULL;    // client has disconnected
 }
 
-void sendError(EthernetClient * client) {
+void sendError(EthernetClient client) {
   if (Serial) {
     Serial.println("400 Bad Request");
   }
 
-  client->println(F("HTTP/1.1 400 Bad Request"));
-  client->println();
-  client->println();
+  client.println(F("HTTP/1.1 400 Bad Request"));
+  client.println();
+  client.println(F("Bad Request"));
+  client.println();
 }
 
-void sendOkHeader(EthernetClient * client) {
+void sendOkHeader(EthernetClient client) {
   if (Serial) {
     Serial.println("200 OK");
   }
 
-  client->println(F("HTTP/1.1 200 OK"));
-  client->println(F("Content-Type: text/html"));
-  client->println(F("Connection: close"));  // the connection will be closed after completion of the response
-  client->println();
+  client.println(F("HTTP/1.1 200 OK"));
+  client.println(F("Content-Type: text/html"));
+  client.println(F("Connection: close"));  // the connection will be closed after completion of the response
+  client.println();
+}
+
+void sendHelpPage(EthernetClient client) {
+
+  client.println(F("<!DOCTYPE HTML>"));
+  client.println(F("<html>"));
+  client.println(F("<head><style>"));
+  client.println(F("table, th, td {border: 1px solid black; border-radius: 10px;}"));
+  client.println(F("</style></head><body>"));
+  // output the value of each analog input pin
+  client.println(F("<p>Speakers are controlled by an 8-bit Speaker Control Register (scr) with bit assignment:<br />"));
+  client.println(F("<table>"));
+  client.println(F("<tr><th>Bit</th><th>Speaker</th><th>Status</th></tr>"));
+
+  char buf[8];
+  for (int s = 7; s >= 0; s--) {
+    client.print(F("<tr><td>"));
+    client.print(s);
+    client.print(F("</td><td>"));
+    client.print(F("<form action=\"/scr&"));
+    sprintf(buf, "%02x", 1 << s);
+    client.print(buf);
+    client.print(F("\"><input type=\"submit\" value=\""));
+    client.print(speakers[s]);
+    client.print(F("\"></form>"));
+    client.print(F("</td><td>"));
+    if (scr & (1 << s)) {
+      client.print(F(" on"));
+    } else {
+      client.print(F(" off"));
+    }
+    client.print(F("</td></tr>"));
+  }
+  client.println(F("</table>"));
+  client.print(F("<p>scr="));
+  client.println(scr, HEX);
+  client.println(F("<p>Full documentation and code can be <a href=\"https://github.com/smr547/speaker-switch\">found on GitHUB</a></p>"));
+  client.println(F("</body></html>"));
 }
 
 /* interpret the ascii digits in[0] and in[1] as hex
@@ -219,7 +258,7 @@ void loop() {
 
     // we are only interested the first line of the request (ignore the rest)
 
-    char * line = getRequestLine(&client);
+    char * line = getRequestLine(client);
 
     // if the first line of the request is not NULL, parse it into it's constituent
     // parts according to the HTTP spec
@@ -255,7 +294,7 @@ void loop() {
       // finally the PARAM
 
       ptr = param;
-      while (*ptr != '\0' && *ptr != ' ') {
+      while (*ptr != '\0' && *ptr != ' ' && *ptr != '?') {
         ptr++;
       }
       *ptr = '\0'; // mark the end of parameters
@@ -272,45 +311,19 @@ void loop() {
       // we only support the GET method
 
       if (strcmp(method, "GET") != 0) {
-        sendError(&client); // illegal method
+        sendError(client); // illegal method
       } else if (strcmp(resource, "/") == 0) {
 
         // a request to the root resource yields a human readable webpage
 
-        sendOkHeader(&client);
+        sendOkHeader(client);
+        sendHelpPage(client);
 
-        client.println(F("<!DOCTYPE HTML>"));
-        client.println(F("<html>"));
-        client.println(F("<head><style>"));
-        client.println(F("table, th, td {border: 1px solid black; border-radius: 10px;}"));
-        client.println(F("</style></head><body>"));
-        // output the value of each analog input pin
-        client.println(F("<p>Speakers are controlled by an 8-bit Speaker Control Register (scr) with bit assignment:<br />"));
-        client.println(F("<table>"));
-        client.println(F("<tr><th>Bit</th><th>Speaker</th><th>Status</th></tr>"));
-        for (int s = 7; s >= 0; s--) {
-          client.print(F("<tr><td>"));
-          client.print(s);
-          client.print(F("</td><td>"));
-          client.print(speakers[s]);
-          client.print(F("</td><td>"));
-          if (scr & (1 << s)) {
-            client.print(F(" on"));
-          } else {
-            client.print(F(" off"));
-          }
-          client.print(F("</td></tr>"));
-        }
-        client.println(F("</table>"));
-        client.print(F("<p>scr="));
-        client.println(scr, HEX);
-        client.println(F("<p>Full documentation and code can be <a href=\"https://github.com/smr547/speaker-switch\">found on GitHUB</a></p>"));
-        client.println(F("</body></html>"));
       } else if (strcmp(resource, "/scr") == 0 && strlen(param) == 0) {
 
         // return the HEX representation of the scr
 
-        sendOkHeader(&client);
+        sendOkHeader(client);
         client.println(scr, HEX);
       } else if (strcmp(resource, "/scr") == 0 && strlen(param) == 2) {
 
@@ -321,16 +334,16 @@ void loop() {
         if (new_scr >= 0) {     // check if valid HEX
           scr = new_scr;
           configureRelays(scr);
-          sendOkHeader(&client);
-          client.println(scr, HEX);
+          sendOkHeader(client);
+          sendHelpPage(client);
         } else {
-          sendError(&client);
+          sendError(client);
         }
       } else {
 
         // all other cases result in a 400 Bad request error
 
-        sendError(&client);
+        sendError(client);
       }
 
       // all done for this request
